@@ -59,7 +59,7 @@ jobs:
 
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
             '.taskDefinition |
-            .containerDefinitions[0].image = "suneel-717/medusa-store:latest" |
+            .containerDefinitions[0].image = "suneel717/medusa-store:latest" |
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
 
           NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
