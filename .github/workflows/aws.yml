@@ -25,7 +25,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Step 4: Build the Docker image
+      # Step 4: Build Docker image
       - name: Build Docker image
         run: |
           docker build -t suneel717/medusa-store:latest .
@@ -43,34 +43,57 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # Step 7: Pull Docker image (for ECS)
-      - name: Pull Docker image from Docker Hub
-        run: |
-          docker pull suneel717/medusa-store:latest
-          echo "Pulled image: suneel717/medusa-store:latest"
-
-      # Step 8: Update ECS task definition
-      - name: Update ECS task definition
+      # Step 7: Update ECS task definition with env vars
+      - name: Register new ECS task definition with secrets
         id: update-task-def
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition \
+          EXISTING_TASK=$(aws ecs describe-task-definition \
             --task-definition medusa-task \
             --region us-east-1)
 
-          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
-            '.taskDefinition |
-            .containerDefinitions[0].image = "suneel717/medusa-store:latest" |
-            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          NEW_TASK_DEF=$(echo "$EXISTING_TASK" | jq \
+            --arg IMAGE "suneel717/medusa-store:latest" \
+            --arg REDIS_URL "${{ secrets.REDIS_URL }}" \
+            --arg DATABASE_URL "${{ secrets.DATABASE_URL }}" \
+            --arg JWT_SECRET "${{ secrets.JWT_SECRET }}" \
+            --arg COOKIE_SECRET "${{ secrets.COOKIE_SECRET }}" \
+            '{
+              family: .taskDefinition.family,
+              executionRoleArn: .taskDefinition.executionRoleArn,
+              networkMode: .taskDefinition.networkMode,
+              requiresCompatibilities: .taskDefinition.requiresCompatibilities,
+              cpu: .taskDefinition.cpu,
+              memory: .taskDefinition.memory,
+              containerDefinitions: [
+                {
+                  name: "medusa",
+                  image: $IMAGE,
+                  essential: true,
+                  portMappings: [{
+                    containerPort: 9000,
+                    protocol: "tcp"
+                  }],
+                  environment: [
+                    { name: "REDIS_URL", value: $REDIS_URL },
+                    { name: "DATABASE_URL", value: $DATABASE_URL },
+                    { name: "JWT_SECRET", value: $JWT_SECRET },
+                    { name: "COOKIE_SECRET", value: $COOKIE_SECRET }
+                  ]
+                }
+              ]
+            }')
 
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+          echo "$NEW_TASK_DEF" > new-task-def.json
+
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
             --region us-east-1 \
-            --cli-input-json "$NEW_TASK_DEF" \
+            --cli-input-json file://new-task-def.json \
             | jq -r '.taskDefinition.taskDefinitionArn')
 
-          echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
+          echo "task_definition_arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
-      # Step 9: Update ECS service
-      - name: Update ECS service
+      # Step 8: Update ECS service
+      - name: Deploy ECS service
         run: |
           aws ecs update-service \
             --cluster medusa-cluster \
@@ -78,13 +101,11 @@ jobs:
             --task-definition ${{ steps.update-task-def.outputs.task_definition_arn }} \
             --force-new-deployment \
             --region us-east-1
-          echo "Updated ECS service"
 
-      # Step 10: Wait for ECS service to stabilize
+      # Step 9: Wait until service is stable
       - name: Wait for ECS service to stabilize
         run: |
           aws ecs wait services-stable \
             --cluster medusa-cluster \
             --services medusa-service \
             --region us-east-1
-          echo "ECS service is now stable"
