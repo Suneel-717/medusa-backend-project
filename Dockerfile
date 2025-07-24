@@ -1,16 +1,23 @@
-# Dockerfile
+# Use Node.js base image
+FROM node:20-alpine
 
-FROM node:18
-
+# Set working directory
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+# Copy dependency files first
+COPY package.json yarn.lock ./
 
+# Install dependencies using Yarn
+RUN yarn install
+
+# Copy the rest of the application code
 COPY . .
 
-RUN npm run build
+# Build the Medusa backend
+RUN yarn build
 
+# Expose Medusa backend port
 EXPOSE 9000
 
-CMD ["npm", "run", "start"]
+# Start the server
+CMD ["yarn", "start"]
