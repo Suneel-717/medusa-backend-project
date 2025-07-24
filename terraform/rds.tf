@@ -30,11 +30,11 @@ resource "aws_db_instance" "medusa_postgres" {
   identifier             = "medusa-postgres-db"
   allocated_storage      = 20
   engine                 = "postgres"
-  engine_version         = "15.2"
+  engine_version         = "13.20"
   instance_class         = "db.t3.micro"
-  name                   = "medusa"
-  username               = "admin"
-  password               = admin717
+  db_name                = "medusa"
+  username               = "medusadbuser"
+  password               = "admin717"
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   skip_final_snapshot    = true
