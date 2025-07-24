@@ -109,3 +109,5 @@ jobs:
             --cluster medusa-cluster \
             --services medusa-service \
             --region us-east-1
+            --waiter-delay 15 \
+            --waiter-max-attempts 80
