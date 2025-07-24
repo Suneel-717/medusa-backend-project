@@ -19,10 +19,15 @@ resource "aws_ecs_task_definition" "medusa_task" {
       name      = "medusa"
       image     = "${aws_ecr_repository.medusa_repo.repository_url}:latest"
       essential = true
-      portMappings = [{
-        containerPort = 9000
-        protocol      = "tcp"
-      }]
+
+      portMappings = [
+        {
+          containerPort = 9000
+          hostPort      = 9000
+          protocol      = "tcp"
+        }
+      ]
+
       environment = [
         {
           name  = "REDIS_URL"
