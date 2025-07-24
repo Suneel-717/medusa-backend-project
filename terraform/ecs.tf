@@ -1,7 +1,3 @@
-# ----------------------
-# FILE: ecs.tf
-# ----------------------
-
 resource "aws_ecs_cluster" "medusa_cluster" {
   name = "medusa-cluster"
 }
@@ -9,17 +5,17 @@ resource "aws_ecs_cluster" "medusa_cluster" {
 resource "aws_ecs_task_definition" "medusa_task" {
   family                   = "medusa-task"
   requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
   cpu                      = "512"
   memory                   = "1024"
-  network_mode             = "awsvpc"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = aws_iam_role.ecs_task_execution_role.arn
 
   container_definitions = jsonencode([
     {
       name      = "medusa"
       image     = "${aws_ecr_repository.medusa_repo.repository_url}:latest"
       essential = true
-
       portMappings = [
         {
           containerPort = 9000
@@ -27,8 +23,11 @@ resource "aws_ecs_task_definition" "medusa_task" {
           protocol      = "tcp"
         }
       ]
-
       environment = [
+        {
+          name  = "DATABASE_URL"
+          value = "postgres://admin:admin717@medusadb.co9s80gqefz6.us-east-1.rds.amazonaws.com:5432/medusa?ssl=true&sslmode=require"
+        },
         {
           name  = "REDIS_URL"
           value = "redis://ridus-cache-anzzch.serverless.use1.cache.amazonaws.com:6379"
@@ -42,10 +41,18 @@ resource "aws_ecs_task_definition" "medusa_task" {
           value = "2c64343c97ca4d70bf94e152eb299b80"
         },
         {
-          name  = "DATABASE_URL"
-          value = "postgres://admin:admin717@medusadb.co9s80gqefz6.us-east-1.rds.amazonaws.com:5432/medusa?ssl=true&sslmode=require&rejectUnauthorized=false"
+          name  = "NODE_ENV"
+          value = "production"
         }
-      ]
+      ],
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          awslogs-group         = "/ecs/medusa-backend"
+          awslogs-region        = "us-east-1"
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   ])
 }
@@ -54,8 +61,8 @@ resource "aws_ecs_service" "medusa_service" {
   name            = "medusa-service"
   cluster         = aws_ecs_cluster.medusa_cluster.id
   task_definition = aws_ecs_task_definition.medusa_task.arn
-  launch_type     = "FARGATE"
   desired_count   = 1
+  launch_type     = "FARGATE"
 
   network_configuration {
     subnets          = aws_subnet.public[*].id
